@@ -1,10 +1,9 @@
 import os
-import traceback
+import httpx
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from google import genai
 from pymongo import MongoClient
 
 app = FastAPI(title="AI Assistant Backend")
@@ -41,20 +40,34 @@ def home():
 @app.post("/api/chat")
 async def chat_with_ai(data: ChatRequest):
     if not GEMINI_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not set.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is missing on Render!")
+
+    # Direct Google Generative Language REST API endpoint
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": f"You are Jarvis, a smart AI assistant. Answer in Hinglish.\n\nUser: {data.message}\nJarvis:"
+                    }
+                ]
+            }
+        ]
+    }
 
     try:
-        # Initialize Google GenAI client
-        client = genai.Client(api_key=GEMINI_KEY)
-        
-        # Text generation call
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"You are Jarvis, a smart AI assistant. Answer in Hinglish.\n\nUser: {data.message}\nJarvis:",
-        )
-        ai_reply = response.text.strip() if response.text else "Sorry, I could not generate a response."
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload)
+            res_json = response.json()
 
-        # Save to Mongo
+        if response.status_code != 200:
+            print("GOOGLE API ERROR:", res_json)
+            raise HTTPException(status_code=response.status_code, detail=res_json.get("error", {}).get("message", "API Error"))
+
+        ai_reply = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+
         if chats_collection is not None:
             try:
                 chats_collection.insert_one({
@@ -67,7 +80,9 @@ async def chat_with_ai(data: ChatRequest):
                 print(f"DB Error: {db_err}")
 
         return {"status": "success", "reply": ai_reply}
+
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"BACKEND_ERROR_DETAIL: {str(e)}")
-        traceback.print_exc()
+        print(f"Unhandled Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
