@@ -1,96 +1,99 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from pymongo import MongoClient
-import google.generativeai as genai
+import os
 from datetime import datetime
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import google.generativeai as genai
+from pymongo import MongoClient
 
+# 1. FastAPI App Initialization
 app = FastAPI(title="AI Assistant Backend")
 
-# ==========================================
-# 1. API & DATABASE CREDENTIALS
-# ==========================================
-GEMINI_API_KEY = "AQ.Ab8RN6K-qab7RwiKUS6K5kDq9A1oFSzwUCSr7RU-Hjb0VXY9Jw"
-MONGO_URI = "mongodb+srv://admin:jarvis123@cluster0.kbyb4fm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-
-# ==========================================
-# 2. DATABASE CONNECTION
-# ==========================================
-client = MongoClient(MONGO_URI)
-db = client["ai_assistant_db"]
-chat_collection = db["conversations"]
-call_logs_collection = db["call_records"]
-
-# ==========================================
-# 3. AI MODEL CONFIGURATION
-# ==========================================
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel(
-    model_name="models/gemini-3.6-flash",
-    system_instruction="""
-Tumhara naam Jarvis hai.
-Tum ek smart multilingual AI assistant ho.
-User ya Caller jis bhasha me baat kare (Hindi, English, Bhojpuri, etc.), usi bhasha me natural, polite aur clear jawab do.
-"""
+# 2. CORS Setup (Browser & Mobile Access ke liye compulsory)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# ==========================================
-# 4. REQUEST DATA MODELS
-# ==========================================
+# 3. Gemini AI Configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "Aapki_Gemini_API_Key_Yahan")
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+# 4. MongoDB Database Setup
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://admin:admin123@cluster0.mongodb.net/?retryWrites=true&w=majority")
+client = MongoClient(MONGO_URI)
+db = client["jarvis_db"]
+chats_collection = db["conversations"]
+calls_collection = db["call_logs"]
+
+# 5. Pydantic Models (Request Structure)
 class ChatRequest(BaseModel):
     user_id: str
     message: str
 
 class CallLogRequest(BaseModel):
-    caller_number: str
-    transcription: str
-    detected_language: str
-    audio_url: str
+    user_id: str
+    phone_number: str
+    call_type: str
+    duration: int
+    summary: str = ""
 
-# ==========================================
-# 5. API ENDPOINTS
-# ==========================================
+# 6. Routes / Endpoints
+
 @app.get("/")
 def home():
-    return {"status": "AI Server is Live and Running!"}
+    return {"status": "online", "message": "Jarvis AI Backend is Running 24/7!"}
 
 @app.post("/api/chat")
-def chat_with_ai(data: ChatRequest):
+async def chat_with_ai(data: ChatRequest):
     try:
-        response = model.generate_content(data.message)
-        reply = response.text
+        # Prompt setup
+        system_instruction = (
+            "You are Jarvis, a smart, friendly, and witty AI assistant. "
+            "Respond in natural Hinglish (Hindi + English mix) unless the user asks otherwise. "
+            "Keep answers clear, helpful, and concise."
+        )
+        prompt = f"{system_instruction}\n\nUser: {data.message}\nJarvis:"
+        
+        response = model.generate_content(prompt)
+        ai_reply = response.text.strip()
 
-        # MongoDB me conversation history save karna
-        chat_collection.insert_one({
+        # Database me record save karna
+        chats_collection.insert_one({
             "user_id": data.user_id,
             "user_message": data.message,
-            "assistant_reply": reply,
+            "ai_reply": ai_reply,
             "timestamp": datetime.utcnow()
         })
 
-        return {"status": "success", "reply": reply}
+        return {"status": "success", "reply": ai_reply}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/save-call")
-def save_call_record(data: CallLogRequest):
+async def save_call_record(data: CallLogRequest):
     try:
-        # Caller logs aur recording details save karna
         record = {
-            "caller_number": data.caller_number,
-            "transcription": data.transcription,
-            "detected_language": data.detected_language,
-            "audio_url": data.audio_url,
+            "user_id": data.user_id,
+            "phone_number": data.phone_number,
+            "call_type": data.call_type,
+            "duration": data.duration,
+            "summary": data.summary,
             "timestamp": datetime.utcnow()
         }
-        call_logs_collection.insert_one(record)
-        return {"status": "success", "message": "Call log & recording saved"}
+        result = calls_collection.insert_one(record)
+        return {"status": "success", "inserted_id": str(result.inserted_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/call-logs")
-def get_all_calls():
+async def get_all_calls(user_id: str = "vishal_mobile"):
     try:
-        logs = list(call_logs_collection.find({}, {"_id": 0}))
+        logs = list(calls_collection.find({"user_id": user_id}, {"_id": 0}))
         return {"status": "success", "logs": logs}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
