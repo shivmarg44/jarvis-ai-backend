@@ -1,4 +1,5 @@
 import os
+import traceback
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,17 +17,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Google GenAI Client with Key
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
-client = None
-if GEMINI_KEY:
-    try:
-        client = genai.Client(api_key=GEMINI_KEY)
-    except Exception as e:
-        print(f"GenAI Init Error: {e}")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # MongoDB Setup
-MONGO_URI = os.getenv("MONGO_URI", "")
+MONGO_URI = os.getenv("MONGO_URI", "").strip()
 chats_collection = None
 if MONGO_URI:
     try:
@@ -46,16 +40,21 @@ def home():
 
 @app.post("/api/chat")
 async def chat_with_ai(data: ChatRequest):
-    if not client:
-        raise HTTPException(status_code=500, detail="Gemini Client is not initialized. Check GEMINI_API_KEY on Render.")
-    
+    if not GEMINI_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not set.")
+
     try:
+        # Initialize Google GenAI client
+        client = genai.Client(api_key=GEMINI_KEY)
+        
+        # Text generation call
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=f"You are Jarvis, a smart and witty assistant. Respond in clear Hinglish.\n\nUser: {data.message}\nJarvis:",
+            contents=f"You are Jarvis, a smart AI assistant. Answer in Hinglish.\n\nUser: {data.message}\nJarvis:",
         )
-        ai_reply = response.text.strip()
+        ai_reply = response.text.strip() if response.text else "Sorry, I could not generate a response."
 
+        # Save to Mongo
         if chats_collection is not None:
             try:
                 chats_collection.insert_one({
@@ -65,8 +64,10 @@ async def chat_with_ai(data: ChatRequest):
                     "timestamp": datetime.utcnow()
                 })
             except Exception as db_err:
-                print(f"DB Insert Error: {db_err}")
+                print(f"DB Error: {db_err}")
 
         return {"status": "success", "reply": ai_reply}
     except Exception as e:
+        print(f"BACKEND_ERROR_DETAIL: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
