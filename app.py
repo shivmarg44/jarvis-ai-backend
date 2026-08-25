@@ -42,9 +42,16 @@ async def chat_with_ai(data: ChatRequest):
     if not GEMINI_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY is missing on Render!")
 
-    # Direct Google Generative Language REST API endpoint
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    # Google Gemini REST endpoint bina query parameter ke
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
     
+    # Naye token format ke liye headers
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_KEY,
+        "Authorization": f"Bearer {GEMINI_KEY}"
+    }
+
     payload = {
         "contents": [
             {
@@ -59,12 +66,13 @@ async def chat_with_ai(data: ChatRequest):
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
             res_json = response.json()
 
         if response.status_code != 200:
             print("GOOGLE API ERROR:", res_json)
-            raise HTTPException(status_code=response.status_code, detail=res_json.get("error", {}).get("message", "API Error"))
+            error_msg = res_json.get("error", {}).get("message", "API Error")
+            raise HTTPException(status_code=response.status_code, detail=error_msg)
 
         ai_reply = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
 
