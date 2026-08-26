@@ -1,7 +1,7 @@
 import os
 import httpx
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pymongo import MongoClient
@@ -41,51 +41,47 @@ async def chat_with_ai(data: ChatRequest):
     if not API_KEY:
         return {"status": "error", "reply": "API Key Render par set nahi hai."}
 
-    # Only core conversation models
-    chat_models = [
-        "llama-3.1-8b-instant",
-        "llama3-8b-8192",
-        "llama3-70b-8192"
-    ]
-
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
 
-    last_error = ""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for model_name in chat_models:
-            payload = {
-                "model": model_name,
-                "messages": [
-                    {"role": "system", "content": "You are Jarvis, a smart and helpful AI assistant. Always respond concisely in friendly Hinglish."},
-                    {"role": "user", "content": data.message}
-                ]
+    # Standard chat completion payload
+    payload = {
+        "model": "llama-3.1-8b-instant",
+        "messages": [
+            {
+                "role": "user",
+                "content": f"You are Jarvis AI. Reply concisely in friendly Hinglish to the user.\n\nUser: {data.message}\nJarvis:"
             }
+        ],
+        "temperature": 0.7
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            res_json = response.json()
+
+        if response.status_code != 200:
+            err_msg = res_json.get("error", {}).get("message", str(res_json))
+            return {"status": "error", "reply": f"Groq Error: {err_msg}"}
+
+        ai_reply = res_json["choices"][0]["message"]["content"].strip()
+
+        if chats_collection is not None:
             try:
-                response = await client.post(url, json=payload, headers=headers)
-                res_json = response.json()
+                chats_collection.insert_one({
+                    "user_id": data.user_id,
+                    "user_message": data.message,
+                    "ai_reply": ai_reply,
+                    "timestamp": datetime.utcnow()
+                })
+            except Exception as db_err:
+                print(f"DB Error: {db_err}")
 
-                if response.status_code == 200:
-                    ai_reply = res_json["choices"][0]["message"]["content"].strip()
+        return {"status": "success", "reply": ai_reply}
 
-                    if chats_collection is not None:
-                        try:
-                            chats_collection.insert_one({
-                                "user_id": data.user_id,
-                                "user_message": data.message,
-                                "ai_reply": ai_reply,
-                                "timestamp": datetime.utcnow()
-                            })
-                        except Exception as db_err:
-                            print(f"DB Error: {db_err}")
-
-                    return {"status": "success", "reply": ai_reply}
-                else:
-                    last_error = res_json.get("error", {}).get("message", str(res_json))
-            except Exception as e:
-                last_error = str(e)
-
-    return {"status": "error", "reply": f"Groq Error: {last_error}"}
+    except Exception as e:
+        return {"status": "error", "reply": f"Backend Error: {str(e)}"}
