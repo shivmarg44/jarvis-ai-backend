@@ -16,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 MONGO_URI = os.getenv("MONGO_URI", "").strip()
 chats_collection = None
@@ -38,54 +38,45 @@ def home():
 
 @app.post("/api/chat")
 async def chat_with_ai(data: ChatRequest):
-    if not GEMINI_KEY:
-        return {"status": "error", "reply": "GEMINI_API_KEY Render par set nahi hai."}
+    if not API_KEY:
+        return {"status": "error", "reply": "API Key Render par set nahi hai."}
 
-    # Available standard model names to try in order
-    candidate_models = [
-        "gemini-1.5-flash-latest",
-        "gemini-2.0-flash",
-        "gemini-1.5-pro-latest",
-        "gemini-pro"
-    ]
-
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": f"You are Jarvis, a smart AI assistant. Answer in Hinglish.\n\nUser: {data.message}\nJarvis:"}
-                ]
-            }
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": "You are Jarvis, a smart AI assistant. Answer in Hinglish."},
+            {"role": "user", "content": data.message}
         ]
     }
 
-    last_error = ""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for model_name in candidate_models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            res_json = response.json()
+
+        if response.status_code != 200:
+            err_msg = res_json.get("error", {}).get("message", str(res_json))
+            return {"status": "error", "reply": f"API Error: {err_msg}"}
+
+        ai_reply = res_json["choices"][0]["message"]["content"].strip()
+
+        if chats_collection is not None:
             try:
-                response = await client.post(url, json=payload)
-                res_json = response.json()
+                chats_collection.insert_one({
+                    "user_id": data.user_id,
+                    "user_message": data.message,
+                    "ai_reply": ai_reply,
+                    "timestamp": datetime.utcnow()
+                })
+            except Exception as db_err:
+                print(f"DB Error: {db_err}")
 
-                if response.status_code == 200:
-                    ai_reply = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return {"status": "success", "reply": ai_reply}
 
-                    if chats_collection is not None:
-                        try:
-                            chats_collection.insert_one({
-                                "user_id": data.user_id,
-                                "user_message": data.message,
-                                "ai_reply": ai_reply,
-                                "timestamp": datetime.utcnow()
-                            })
-                        except Exception as db_err:
-                            print(f"DB Error: {db_err}")
-
-                    return {"status": "success", "reply": ai_reply}
-                else:
-                    last_error = res_json.get("error", {}).get("message", str(res_json))
-                    print(f"Failed with model {model_name}: {last_error}")
-            except Exception as e:
-                last_error = str(e)
-
-    return {"status": "error", "reply": f"Google API Error: {last_error}"}
+    except Exception as e:
+        return {"status": "error", "reply": f"Backend Error: {str(e)}"}
