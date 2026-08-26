@@ -41,62 +41,51 @@ async def chat_with_ai(data: ChatRequest):
     if not API_KEY:
         return {"status": "error", "reply": "API Key Render par set nahi hai."}
 
+    # Only core conversation models
+    chat_models = [
+        "llama-3.1-8b-instant",
+        "llama3-8b-8192",
+        "llama3-70b-8192"
+    ]
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # 1. Groq ke active models auto-fetch karein
-            models_res = await client.get("https://api.groq.com/openai/v1/models", headers=headers)
-            models_data = models_res.json()
-            
-            # Text generation models filter karein (whisper/audio exclude karke)
-            available_models = [
-                m["id"] for m in models_data.get("data", [])
-                if "whisper" not in m["id"].lower() and "embed" not in m["id"].lower()
-            ]
-
-            if not available_models:
-                return {"status": "error", "reply": "Koi active Groq model nahi mila."}
-
-            # 2. Pehle available active model ke sath chat karein
-            chosen_model = available_models[0]
-            for m in available_models:
-                if "llama" in m.lower():
-                    chosen_model = m
-                    break
-
+    last_error = ""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for model_name in chat_models:
             payload = {
-                "model": chosen_model,
+                "model": model_name,
                 "messages": [
-                    {"role": "system", "content": "You are Jarvis, an intelligent and helpful AI assistant. Always respond concisely in friendly Hinglish."},
+                    {"role": "system", "content": "You are Jarvis, a smart and helpful AI assistant. Always respond concisely in friendly Hinglish."},
                     {"role": "user", "content": data.message}
                 ]
             }
+            try:
+                response = await client.post(url, json=payload, headers=headers)
+                res_json = response.json()
 
-            chat_res = await client.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers)
-            res_json = chat_res.json()
+                if response.status_code == 200:
+                    ai_reply = res_json["choices"][0]["message"]["content"].strip()
 
-            if chat_res.status_code != 200:
-                err_msg = res_json.get("error", {}).get("message", str(res_json))
-                return {"status": "error", "reply": f"Groq Error: {err_msg}"}
+                    if chats_collection is not None:
+                        try:
+                            chats_collection.insert_one({
+                                "user_id": data.user_id,
+                                "user_message": data.message,
+                                "ai_reply": ai_reply,
+                                "timestamp": datetime.utcnow()
+                            })
+                        except Exception as db_err:
+                            print(f"DB Error: {db_err}")
 
-            ai_reply = res_json["choices"][0]["message"]["content"].strip()
+                    return {"status": "success", "reply": ai_reply}
+                else:
+                    last_error = res_json.get("error", {}).get("message", str(res_json))
+            except Exception as e:
+                last_error = str(e)
 
-            if chats_collection is not None:
-                try:
-                    chats_collection.insert_one({
-                        "user_id": data.user_id,
-                        "user_message": data.message,
-                        "ai_reply": ai_reply,
-                        "timestamp": datetime.utcnow()
-                    })
-                except Exception as db_err:
-                    print(f"DB Error: {db_err}")
-
-            return {"status": "success", "reply": ai_reply}
-
-    except Exception as e:
-        return {"status": "error", "reply": f"Backend Error: {str(e)}"}
+    return {"status": "error", "reply": f"Groq Error: {last_error}"}
