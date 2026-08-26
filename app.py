@@ -41,8 +41,8 @@ async def chat_with_ai(data: ChatRequest):
     if not GEMINI_KEY:
         return {"status": "error", "reply": "GEMINI_API_KEY Render par set nahi hai."}
 
-    # Direct Google API URL with query key parameter
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    # v1 stable endpoint use karein
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
 
     payload = {
         "contents": [
