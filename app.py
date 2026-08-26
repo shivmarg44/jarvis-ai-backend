@@ -61,7 +61,7 @@ async def chat_with_ai(data: ChatRequest):
 
         if response.status_code != 200:
             err_msg = res_json.get("error", {}).get("message", str(res_json))
-            return {"status": "error", "reply": f"API Error: {err_msg}"}
+            return {"status": "error", "reply": f"Groq Error: {err_msg}"}
 
         ai_reply = res_json["choices"][0]["message"]["content"].strip()
 
