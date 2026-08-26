@@ -47,7 +47,7 @@ async def chat_with_ai(data: ChatRequest):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": "You are Jarvis, a smart AI assistant. Answer in Hinglish."},
             {"role": "user", "content": data.message}
