@@ -41,8 +41,13 @@ async def chat_with_ai(data: ChatRequest):
     if not GEMINI_KEY:
         return {"status": "error", "reply": "GEMINI_API_KEY Render par set nahi hai."}
 
-    # v1 stable endpoint use karein
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    # Available standard model names to try in order
+    candidate_models = [
+        "gemini-1.5-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-1.5-pro-latest",
+        "gemini-pro"
+    ]
 
     payload = {
         "contents": [
@@ -54,31 +59,33 @@ async def chat_with_ai(data: ChatRequest):
         ]
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
-            res_json = response.json()
-
-        if response.status_code != 200:
-            err_msg = res_json.get("error", {}).get("message", str(res_json))
-            print(f"GOOGLE ERROR: {err_msg}")
-            return {"status": "error", "reply": f"Google Error: {err_msg}"}
-
-        ai_reply = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
-
-        if chats_collection is not None:
+    last_error = ""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for model_name in candidate_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
             try:
-                chats_collection.insert_one({
-                    "user_id": data.user_id,
-                    "user_message": data.message,
-                    "ai_reply": ai_reply,
-                    "timestamp": datetime.utcnow()
-                })
-            except Exception as db_err:
-                print(f"DB Error: {db_err}")
+                response = await client.post(url, json=payload)
+                res_json = response.json()
 
-        return {"status": "success", "reply": ai_reply}
+                if response.status_code == 200:
+                    ai_reply = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-    except Exception as e:
-        print(f"CRASH ERROR: {str(e)}")
-        return {"status": "error", "reply": f"Backend Error: {str(e)}"}
+                    if chats_collection is not None:
+                        try:
+                            chats_collection.insert_one({
+                                "user_id": data.user_id,
+                                "user_message": data.message,
+                                "ai_reply": ai_reply,
+                                "timestamp": datetime.utcnow()
+                            })
+                        except Exception as db_err:
+                            print(f"DB Error: {db_err}")
+
+                    return {"status": "success", "reply": ai_reply}
+                else:
+                    last_error = res_json.get("error", {}).get("message", str(res_json))
+                    print(f"Failed with model {model_name}: {last_error}")
+            except Exception as e:
+                last_error = str(e)
+
+    return {"status": "error", "reply": f"Google API Error: {last_error}"}
