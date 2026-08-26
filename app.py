@@ -18,7 +18,6 @@ app.add_middleware(
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
-# MongoDB Setup
 MONGO_URI = os.getenv("MONGO_URI", "").strip()
 chats_collection = None
 if MONGO_URI:
@@ -40,25 +39,16 @@ def home():
 @app.post("/api/chat")
 async def chat_with_ai(data: ChatRequest):
     if not GEMINI_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is missing on Render!")
+        return {"status": "error", "reply": "GEMINI_API_KEY Render par set nahi hai."}
 
-    # Google Gemini REST endpoint bina query parameter ke
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-    
-    # Naye token format ke liye headers
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_KEY,
-        "Authorization": f"Bearer {GEMINI_KEY}"
-    }
+    # Direct Google API URL with query key parameter
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
 
     payload = {
         "contents": [
             {
                 "parts": [
-                    {
-                        "text": f"You are Jarvis, a smart AI assistant. Answer in Hinglish.\n\nUser: {data.message}\nJarvis:"
-                    }
+                    {"text": f"You are Jarvis, a smart AI assistant. Answer in Hinglish.\n\nUser: {data.message}\nJarvis:"}
                 ]
             }
         ]
@@ -66,13 +56,13 @@ async def chat_with_ai(data: ChatRequest):
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload, headers=headers)
+            response = await client.post(url, json=payload)
             res_json = response.json()
 
         if response.status_code != 200:
-            print("GOOGLE API ERROR:", res_json)
-            error_msg = res_json.get("error", {}).get("message", "API Error")
-            raise HTTPException(status_code=response.status_code, detail=error_msg)
+            err_msg = res_json.get("error", {}).get("message", str(res_json))
+            print(f"GOOGLE ERROR: {err_msg}")
+            return {"status": "error", "reply": f"Google Error: {err_msg}"}
 
         ai_reply = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
 
@@ -89,8 +79,6 @@ async def chat_with_ai(data: ChatRequest):
 
         return {"status": "success", "reply": ai_reply}
 
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"Unhandled Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"CRASH ERROR: {str(e)}")
+        return {"status": "error", "reply": f"Backend Error: {str(e)}"}
