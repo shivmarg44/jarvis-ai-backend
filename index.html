@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis AI Assistant & Call Center</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styling */
+        #sidebar {
+            width: 320px;
+            background-color: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            color: #38bdf8;
+        }
+
+        .tabs {
+            display: flex;
+            padding: 10px 16px;
+            gap: 10px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: #38bdf8;
+            color: #0f172a;
+            font-weight: bold;
+            border-color: #38bdf8;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 10px;
+            background-color: #0284c7;
+            border: none;
+            border-radius: 6px;
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .action-btn:hover {
+            background-color: #0369a1;
+        }
+
+        /* Call Cards */
+        .call-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .call-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            color: #38bdf8;
+            font-size: 0.9rem;
+        }
+
+        .call-time {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        audio {
+            width: 100%;
+            height: 32px;
+            margin-top: 6px;
+        }
+
+        /* Main Chat Area */
+        #main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #0b1120;
+        }
+
+        .main-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #38bdf8;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        #chatbox {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .message-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .ai-avatar {
+            background-color: #0284c7;
+            color: white;
+        }
+
+        .user-avatar {
+            background-color: #475569;
+            color: white;
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .ai-msg {
+            background-color: #1e293b;
+            color: #f8fafc;
+            border: 1px solid #334155;
+        }
+
+        .user-msg {
+            background-color: #2563eb;
+            color: #ffffff;
+            margin-left: auto;
+        }
+
+        .chat-input-area {
+            padding: 16px 24px;
+            border-top: 1px solid #334155;
+            display: flex;
+            gap: 12px;
+            background-color: #1e293b;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: white;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        .chat-input:focus {
+            border-color: #38bdf8;
+        }
+
+        .send-btn {
+            padding: 0 20px;
+            background-color: #38bdf8;
+            color: #0f172a;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .send-btn:hover {
+            background-color: #7dd3fc;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+        <div class="sidebar-header">
+            <span><i class="fa-solid fa-microchip"></i> JARVIS CORE</span>
+        </div>
+        <div class="tabs">
+            <button id="tab-chats" class="tab-btn" onclick="switchTab('chats')">Conversations</button>
+            <button id="tab-calls" class="tab-btn active" onclick="switchTab('calls')"><i class="fa-solid fa-phone"></i> Call Logs</button>
+        </div>
+        <div class="sidebar-content">
+            <div id="calls-view">
+                <button class="action-btn" onclick="loadCallLogs()">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh Recordings
+                </button>
+                <div id="calls-list">
+                    <div style="font-size:0.8rem;color:#9ca3af;padding:10px;">Loading call records...</div>
+                </div>
+            </div>
+            <div id="chats-view" style="display:none;">
+                <div style="font-size:0.85rem;color:#94a3b8;padding:10px;">Chat history will be saved here.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Area -->
+    <div id="main-area">
+        <div class="main-header">
+            <i class="fa-solid fa-bolt"></i> JARVIS AI
+        </div>
+        <div id="chatbox">
+            <div class="message-row">
+                <div class="avatar ai-avatar"><i class="fa-solid fa-robot"></i></div>
+                <div class="message ai-msg">
+                    ⚡ <strong>Jarvis Online!</strong> Main chat, weather, search aur call screening handle karne ke liye active hoon.
+                </div>
+            </div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="userInput" class="chat-input" placeholder="Type message or ask Jarvis..." onkeypress="handleKeyPress(event)">
+            <button id="sendBtn" class="send-btn" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <script>
+        const BASE_API = "https://jarvis-ai-backend-y402.onrender.com";
+        const userId = "user_" + Math.floor(Math.random() * 10000);
+        let currentSessionMessages = [];
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            return String(text).replace(/[&<>"']/g, function (m) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+            });
+        }
+
+        function switchTab(tab) {
+            const chatsView = document.getElementById("chats-view");
+            const callsView = document.getElementById("calls-view");
+            const tabChats = document.getElementById("tab-chats");
+            const tabCalls = document.getElementById("tab-calls");
+
+            if (tab === 'chats') {
+                chatsView.style.display = "block";
+                callsView.style.display = "none";
+                tabChats.classList.add("active");
+                tabCalls.classList.remove("active");
+            } else {
+                chatsView.style.display = "none";
+                callsView.style.display = "block";
+                tabCalls.classList.add("active");
+                tabChats.classList.remove("active");
+                loadCallLogs();
+            }
+        }
+
+        async function loadCallLogs() {
+            const list = document.getElementById("calls-list");
+            list.innerHTML = `<div style="font-size:0.8rem;color:#9ca3af;padding:10px;">Loading call records...</div>`;
+            try {
+                const res = await fetch(`${BASE_API}/api/call/logs`);
+                const data = await res.json();
+                list.innerHTML = "";
+
+                if (!data.logs || data.logs.length === 0) {
+                    list.innerHTML = `<div style="font-size:0.8rem;color:#9ca3af;padding:10px;">Abhi tak koi unknown call record nahi hua hai.</div>`;
+                    return;
+                }
+
+                data.logs.forEach(log => {
+                    const card = document.createElement("div");
+                    card.className = "call-card";
+                    const audioUrl = log.audio_url.startsWith("http") ? log.audio_url : `${BASE_API}${log.audio_url}`;
+                    card.innerHTML = `
+                        <div class="call-card-top">
+                            <span><i class="fa-solid fa-phone"></i> ${escapeHtml(log.caller_number)}</span>
+                            <span style="font-size:0.75rem;color:#38bdf8;">${log.duration_seconds || 0}s</span>
+                        </div>
+                        <div class="call-time">${escapeHtml(log.recorded_at || 'Just now')}</div>
+                        <audio controls src="${audioUrl}"></audio>
+                    `;
+                    list.appendChild(card);
+                });
+            } catch (err) {
+                list.innerHTML = `<div style="font-size:0.8rem;color:#ef4444;padding:10px;">Failed to load logs. Server connecting...</div>`;
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById("userInput");
+            const btn = document.getElementById("sendBtn");
+            const chatbox = document.getElementById("chatbox");
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            chatbox.innerHTML += `
+                <div class="message-row">
+                    <div class="message user-msg">${escapeHtml(msg)}</div>
+                    <div class="avatar user-avatar"><i class="fa-solid fa-user"></i></div>
+                </div>
+            `;
+            input.value = "";
+            btn.disabled = true;
+            chatbox.scrollTop = chatbox.scrollHeight;
+
+            const loadingId = "load-" + Date.now();
+            chatbox.innerHTML += `
+                <div class="message-row" id="${loadingId}">
+                    <div class="avatar ai-avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="message ai-msg">Thinking...</div>
+                </div>
+            `;
+            chatbox.scrollTop = chatbox.scrollHeight;
+
+            try {
+                const res = await fetch(`${BASE_API}/api/chat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        message: msg,
+                        history: currentSessionMessages
+                    })
+                });
+                const data = await res.json();
+                const loadEl = document.getElementById(loadingId);
+
+                if (data.status === "success" || data.reply) {
+                    const replyText = data.reply || data.response || "No reply";
+                    loadEl.querySelector(".ai-msg").innerHTML = marked.parse(replyText);
+                    currentSessionMessages.push({ role: "user", content: msg });
+                    currentSessionMessages.push({ role: "assistant", content: replyText });
+                } else {
+                    loadEl.querySelector(".ai-msg").innerText = "Jarvis backend response error.";
+                }
+            } catch (err) {
+                const loadEl = document.getElementById(loadingId);
+                if (loadEl) {
+                    loadEl.querySelector(".ai-msg").innerText = "Server se response nahi mila.";
+                }
+            } finally {
+                btn.disabled = false;
+                chatbox.scrollTop = chatbox.scrollHeight;
+            }
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === "Enter") sendMessage();
+        }
+
+        // Auto load on open
+        window.onload = () => {
+            loadCallLogs();
+        };
+    </script>
+</body>
+</html>
